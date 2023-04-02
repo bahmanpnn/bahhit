@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import ListCreateAPIView, CreateAPIView
+from rest_framework.generics import ListCreateAPIView, CreateAPIView, RetrieveDestroyAPIView
 from rest_framework.mixins import DestroyModelMixin
 from rest_framework.response import Response
 from rest_framework.status import HTTP_204_NO_CONTENT
@@ -19,6 +19,22 @@ class PostList(ListCreateAPIView):
         serializer.save(poster=self.request.user)
 
 
+class PostRetrieveDestroy(RetrieveDestroyAPIView):
+    queryset = Post.objects.all()
+    serializer_class = PostSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def perform_create(self, serializer):
+        serializer.save(poster=self.request.user)
+
+    def delete(self, request, *args, **kwargs):
+        target_post = Post.objects.filter(pk=self.kwargs['pk'], poster=self.request.user)
+        if target_post.exists():
+            return self.destroy(request, *args, **kwargs)
+        else:
+            raise ValidationError('you don\'t have permission to delete this post!')
+
+
 class VoteCreate(CreateAPIView, DestroyModelMixin):
     serializer_class = VoteSerializer
     permission_classes = (IsAuthenticated,)
@@ -33,10 +49,9 @@ class VoteCreate(CreateAPIView, DestroyModelMixin):
             raise ValidationError('you have already voted for this post!!')
         serializer.save(voter=self.request.user, post=Post.objects.get(pk=self.kwargs.get('pk')))
 
-    def delete(self, request,*args,**kwargs):
+    def delete(self, request, *args, **kwargs):
         if self.get_queryset().exists():
             self.get_queryset().delete()
             return Response(status=HTTP_204_NO_CONTENT)
         else:
             raise ValidationError('you didnt voted this post!!')
-
